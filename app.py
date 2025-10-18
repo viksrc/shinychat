@@ -48,6 +48,27 @@ app_ui = ui.page_fluid(
         class_="chat-header"
     ),
     
+    # Model selector
+    ui.div(
+        ui.input_select(
+            "model_select",
+            "🤖 Select AI Model:",
+            choices={
+                "anthropic/claude-opus-4": "Claude 4 Opus (Anthropic)",
+                "anthropic/claude-3.5-sonnet": "Claude 3.5 Sonnet (Anthropic)",
+                "openai/gpt-4o": "GPT-4o (OpenAI)",
+                "openai/gpt-oss-20b": "GPT-OSS-20B (OpenAI Open Source)",
+                "google/gemini-2.0-flash-exp:free": "Gemini 2.0 Flash (Google)",
+                "qwen/qwen-2.5-72b-instruct": "Qwen 2.5 72B (Alibaba)",
+                "z-ai/glm-4.5": "GLM-4.5 (Zhipu AI - FC)",
+                "z-ai/glm-4.5-air:free": "GLM-4.5 Air (Zhipu AI - Free)",
+                "deepseek/deepseek-chat": "DeepSeek Chat",
+            },
+            selected="anthropic/claude-3.5-sonnet"
+        ),
+        class_="mb-3"
+    ),
+    
     # Chat component
     ui.div(
         ui.chat_ui(
@@ -81,39 +102,77 @@ def server(input, output, session):
     # Create chat instance
     chat = ui.Chat(id="chat")
     
-    # Initialize LLM with OpenRouter (using Claude)
-    llm = None
-    try:
-        # Set OpenRouter API key
-        api_key = "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"
-        
-        # Create ChatOpenRouter instance with Claude
-        llm = ChatOpenRouter(
-            model="anthropic/claude-3.5-sonnet",  # Works perfectly with MCP tools!
-            api_key=api_key,
-            # Instruct the model to use available tools
-            system_prompt=(
-                "You are a helpful assistant. When the user asks for sales data or sales figures, "
-                "use the 'get_sales_data' tool to retrieve the information. Always use tools available "
-                "to you when they can help answer the user's question."
+    # Store current LLM instance
+    current_llm = reactive.value(None)
+    
+    # Get OpenRouter API key from environment variable
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        print("⚠️  OPENROUTER_API_KEY not set. Please set it in your environment.")
+        print("   export OPENROUTER_API_KEY='your-key-here'")
+    
+    # Function to create LLM instance
+    def create_llm(model_name: str):
+        """Create a new LLM instance with the selected model"""
+        try:
+            if not api_key:
+                raise ValueError("OPENROUTER_API_KEY environment variable is required")
+            
+            llm = ChatOpenRouter(
+                model=model_name,
+                api_key=api_key,
+                # Instruct the model to use available tools
+                system_prompt=(
+                    "You are a helpful assistant. When the user asks for sales data or sales figures, "
+                    "use the 'get_sales_data' tool to retrieve the information. Always use tools available "
+                    "to you when they can help answer the user's question."
+                )
             )
-        )
-        print("✅ Claude 3.5 Sonnet (via OpenRouter) initialized!")
-    except Exception as e:
-        print(f"❌ ChatOpenRouter initialization failed: {e}")
+            print(f"✅ {model_name} initialized!")
+            return llm
+        except Exception as e:
+            print(f"❌ Failed to initialize {model_name}: {e}")
+            return None
+    
+    # Initialize with default model
+    llm = create_llm("anthropic/claude-3.5-sonnet")
     
     # Flag to indicate MCP tools are registered and ready
     mcp_ready = reactive.value(False)
+    
+    # Store the current LLM instance
+    current_llm.set(llm)
+    
+    # React to model selection changes
+    @reactive.effect
+    @reactive.event(input.model_select)
+    async def _on_model_change():
+        """Handle model selection changes"""
+        selected_model = input.model_select()
+        print(f"🔄 Switching to model: {selected_model}")
+        
+        # Create new LLM instance
+        new_llm = create_llm(selected_model)
+        if new_llm:
+            current_llm.set(new_llm)
+            # Reset MCP registration flag
+            mcp_ready.set(False)
+            # Clear chat history for new model
+            await chat.clear_messages()
+            await chat.append_message(f"Switched to {selected_model}. How can I help you? 👋")
+        else:
+            await chat.append_message(f"⚠️ Failed to switch to {selected_model}")
 
     # Register MCP server tools asynchronously on app startup
     @reactive.effect
     async def _register_mcp():
-        """Register MCP tools when the app starts"""
-        if llm:
+        """Register MCP tools when the app starts or model changes"""
+        llm_instance = current_llm.get()
+        if llm_instance and not mcp_ready.get():
             try:
                 # Register the MCP server tools via stdio.
                 server_path = str(Path(__file__).with_name("mcp_sales_server.py"))
-                await llm.register_mcp_tools_stdio_async(
+                await llm_instance.register_mcp_tools_stdio_async(
                     command=sys.executable,
                     # Use unbuffered stdio to avoid any potential buffering issues
                     args=["-u", server_path],
@@ -123,7 +182,7 @@ def server(input, output, session):
                 )
                 # Debug: list registered tools so we can verify availability at runtime
                 try:
-                    tools = llm.get_tools()
+                    tools = llm_instance.get_tools()
                     print("🔧 Registered tools:", [t.name for t in tools])
                 except Exception as _e:
                     print(f"ℹ️  Could not list tools: {_e}")
@@ -150,6 +209,9 @@ def server(input, output, session):
         times.append(current_time)
         message_times.set(times)
         
+        # Get current LLM instance
+        llm = current_llm.get()
+        
         # Use LLM for conversation - it will decide whether to call the tool
         if llm:
             try:
@@ -160,7 +222,9 @@ def server(input, output, session):
                         if mcp_ready.get():
                             break
                         await asyncio.sleep(0.2)
-                print(f"🤖 Using Claude with MCP tool calling...")
+                
+                selected_model = input.model_select()
+                print(f"🤖 Using {selected_model} with MCP tool calling...")
                 
                 # Get the response (not streaming for easier parsing)
                 response = await llm.chat_async(user_input)
@@ -227,12 +291,16 @@ def server(input, output, session):
                         # Create DataFrame
                         df = pd.DataFrame(sales_data)
                         
-                        # Create Plotly bar chart
+                        # Create Plotly bar chart - let Plotly choose colors automatically
                         fig = go.Figure(data=[
                             go.Bar(
                                 x=df['Product'],
                                 y=df['Sales'],
-                                marker_color='rgb(102, 126, 234)',
+                                marker=dict(
+                                    color=df.index,  # Color by index to get different colors per bar
+                                    colorscale='Viridis',  # Use Plotly's color scale
+                                    showscale=False
+                                ),
                                 text=df['Sales'],
                                 textposition='auto',
                             )
@@ -280,13 +348,10 @@ def server(input, output, session):
                 print(f"❌ LLM failed: {e}")
                 import traceback
                 print(f"🔍 DEBUG: Full traceback:\n{traceback.format_exc()}")
-                bot_response = generate_bot_response(user_input)
-                await chat.append_message(bot_response)
+                await chat.append_message(f"Sorry, I encountered an error: {str(e)}")
         else:
-            print("⚠️ No LLM available, using fallback")
-            # Generate regular bot response
-            bot_response = generate_bot_response(user_input)
-            await chat.append_message(bot_response)
+            print("⚠️ No LLM available")
+            await chat.append_message("Sorry, the LLM is not available. Please check the configuration.")
         
         # Record bot response time
         bot_time = datetime.datetime.now().strftime("%H:%M:%S")
@@ -318,37 +383,6 @@ def server(input, output, session):
         if times:
             return f"Last message: {times[-1]}"
         return "No messages yet"
-
-def generate_bot_response(user_message: str) -> str:
-    """Generate a simple bot response based on user input"""
-    message_lower = user_message.lower()
-    
-    # Simple keyword-based responses
-    if "hello" in message_lower or "hi" in message_lower:
-        return "Hello! How can I help you today? 😊"
-    elif "how are you" in message_lower:
-        return "I'm doing great! Thanks for asking. How are you?"
-    elif "python" in message_lower:
-        return "Python is awesome! 🐍 Are you working on any interesting projects?"
-    elif "shiny" in message_lower:
-        return "Shiny for Python is fantastic for building interactive web apps! 🌟"
-    elif "weather" in message_lower:
-        return "I don't have access to weather data, but I hope it's nice where you are! ☀️"
-    elif "bye" in message_lower or "goodbye" in message_lower:
-        return "Goodbye! It was nice chatting with you! 👋"
-    elif "help" in message_lower:
-        return "I'm here to help! You can ask me about Python, Shiny, or just have a casual conversation. Try typing 'bar' to see an interactive chart! 📊"
-    elif "?" in user_message:
-        return "That's an interesting question! I'm a simple chatbot, but I'd love to hear more about what you're thinking. 🤔"
-    else:
-        responses = [
-            f"That's interesting! You said: '{user_message}' 🤔",
-            f"I heard you mention: '{user_message}'. Tell me more!",
-            f"Thanks for sharing! What else is on your mind? 💭",
-            "That sounds fascinating! Can you elaborate? ✨",
-            "I'd love to know more about that! Please continue. 🎯"
-        ]
-        return random.choice(responses)
 
 # Create the app
 app = App(app_ui, server)

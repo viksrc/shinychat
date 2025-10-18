@@ -1,0 +1,9 @@
+shiny
+plotly
+shinywidgets
+chatlas[mcp]
+pandas
+mcp[cli]
+fastmcp
+anywidget
+google-genai
