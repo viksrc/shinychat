@@ -182,7 +182,9 @@ def server(input, output, session):
         if llm_instance and not mcp_ready.get():
             try:
                 # Register the MCP server tools via stdio.
-                server_path = str(Path(__file__).with_name("mcp_sales_server.py"))
+                # The MCP server script lives in the repo-level `scripts/` directory after reorganization.
+                project_root = Path(__file__).resolve().parents[1]
+                server_path = str(project_root / "scripts" / "mcp_sales_server.py")
                 await llm_instance.register_mcp_tools_stdio_async(
                     command=sys.executable,
                     # Use unbuffered stdio to avoid any potential buffering issues
