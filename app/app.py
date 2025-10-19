@@ -10,6 +10,18 @@ import os
 import sys
 from pathlib import Path
 
+welcome = """
+**Welcome to Sales Analytics!** How can I assist you with your sales data today?
+
+Here are some suggestions:
+
+* <span class="suggestion submit">Show me sales by region</span>
+* <span class="suggestion submit">What's the best performing product?</span>
+* <span class="suggestion submit">Generate a sales report for Q3</span>
+* <span class="suggestion submit">Compare this month's sales to last month</span>
+* <span class="suggestion submit">Show me the sales trend for the past 6 months</span>
+"""
+
 # Define the UI
 app_ui = ui.page_fluid(
     # Custom CSS for chat styling
@@ -37,6 +49,31 @@ app_ui = ui.page_fluid(
                 padding: 15px;
                 background-color: #f8f9fa;
                 border-radius: 10px;
+            }
+            
+            .suggestion {
+                display: inline-block;
+                color: #007bff;
+                text-decoration: underline;
+                cursor: pointer;
+                font-size: 0.9em;
+                margin: 2px;
+            }
+            .suggestion:hover {
+                color: #0056b3;
+            }
+            .chat-body-wrapper {
+                max-height: 420px;
+                overflow-y: auto;
+                padding-right: 8px;
+            }
+
+            .chat-footer {
+                position: sticky;
+                bottom: 0;
+                background: white;
+                padding: 8px 12px;
+                border-top: 1px solid #e9ecef;
             }
         """)
     ),
@@ -67,22 +104,53 @@ app_ui = ui.page_fluid(
         class_="mb-3"
     ),
     
-    # Chat component
+    # Two-column layout: left sidebar for history, right for chat card
     ui.div(
-        ui.chat_ui(
-            id="chat",
-            messages=["Hello! 👋 I'm your friendly chatbot. How can I help you today?"],
-        ),
-        # Clear button positioned below chat input
-        ui.div(
-            ui.input_action_button(
-                "clear_chat",
-                "🗑️ Clear Chat",
-                class_="btn btn-danger btn-sm mt-2"
+        ui.row(
+            ui.column(3,
+                ui.div(
+                    ui.h5("Chat History"),
+                    ui.output_ui("chat_history"),
+                    class_="p-2",
+                ),
+                class_="border-end",
             ),
-            class_="text-end"
+            ui.column(9,
+                ui.card(
+                    ui.card_header(
+                        ui.h5("Welcome to Sales Analytics", class_="mb-0"),
+                        ui.tooltip(
+                            ui.tags.span("?"),
+                            "This chat is brought to you by Sales Analytics."
+                        ),
+                        class_="d-flex justify-content-between align-items-center"
+                    ),
+                    ui.card_body(
+                                ui.div(
+                                    ui.chat_ui(
+                                        id="chat",
+                                        messages=[welcome],
+                                    ),
+                                    class_="chat-body-wrapper",
+                                ),
+                    ),
+                            # Sticky footer with clear button so it remains visible next to the input
+                            ui.card_footer(
+                                ui.div(
+                                    ui.input_action_button(
+                                        "clear_chat",
+                                        "🗑️ Clear Chat",
+                                        class_="btn btn-danger btn-sm"
+                                    ),
+                                    class_="d-flex justify-content-end w-100"
+                                ),
+                                class_="chat-footer"
+                            ),
+                    class_="mb-3"
+                ),
+                class_="chat-container"
+            )
         ),
-        class_="chat-container"
     ),
     
     # Chat statistics
@@ -97,7 +165,60 @@ app_ui = ui.page_fluid(
 )
 
 def server(input, output, session):
-    # Create chat instance
+    # Create chat instance (async mode)
+    
+    def _create_sales_chart(sales_data, chart_counter_value):
+        """Create and display a sales chart from the provided data"""
+        print(f"📊 Detected sales data, creating chart...")
+        try:
+            # Create DataFrame
+            df = pd.DataFrame(sales_data)
+            
+            # Create a unique ID for the chart
+            chart_id = f"sales_chart_{chart_counter_value}"
+            
+            # Create Plotly bar chart
+            fig = go.Figure(data=[
+                go.Bar(
+                    x=df['Product'],
+                    y=df['Sales'],
+                    marker_color='rgb(102, 126, 234)',
+                    text=df['Sales'],
+                    textposition='auto',
+                )
+            ])
+            
+            fig.update_layout(
+                title="📊 Sales Data Visualization",
+                xaxis_title="Products",
+                yaxis_title="Sales",
+                showlegend=False,
+                height=400,
+                template="plotly_white"
+            )
+            
+            # Use the provided counter value for unique ID
+            chart_id = f"sales_chart_{chart_counter_value}"
+            
+            # Create the render function with the figure
+            @render_widget
+            def make_chart():
+                return fig
+            
+             # Register the output
+            output(id=chart_id)(make_chart)
+
+            msg = ui.div(output_widget(chart_id),class_="my-3")
+          
+            return msg
+            
+        except Exception as chart_error:
+            print(f"⚠️  Failed to create chart: {chart_error}")
+            import traceback
+            print(traceback.format_exc())
+            return False
+
+            
     chat = ui.Chat(id="chat")
     
     # Store current LLM instance
@@ -168,9 +289,9 @@ def server(input, output, session):
             current_llm.set(new_llm)
             # Reset MCP registration flag
             mcp_ready.set(False)
-            # Clear chat history for new model
-            await chat.clear_messages()
-            await chat.append_message(f"Switched to {selected_model}. How can I help you? 👋")
+            # Preserve existing chat messages when switching models.
+            # Do not clear or re-append the welcome message.
+            print("ℹ️ Model switched; preserving existing chat messages.")
         else:
             await chat.append_message(f"⚠️ Failed to switch to {selected_model}")
 
@@ -209,11 +330,14 @@ def server(input, output, session):
     # Track message timestamps
     message_times = reactive.value([])
     
-    # Counter for unique chart IDs
-    chart_counter = reactive.value(0)
+    # Counter for unique chart IDs (non-reactive)
+    # Using a list to make it mutable in nested scopes
+    chart_counter = [0]
     
+    # Removed the separate process_streaming_response method since we've inlined it
+
     @chat.on_user_submit
-    async def handle_user_input(user_input: str):
+    async def _(user_input: str):
         """Handle user message submission and generate bot response"""
         
         # Record message time
@@ -225,165 +349,142 @@ def server(input, output, session):
         # Get current LLM instance
         llm = current_llm.get()
         
-        # Use LLM for conversation - it will decide whether to call the tool
-        if llm:
-            try:
-                # Ensure MCP tools are registered before first prompt to avoid Unknown tool errors
-                if not mcp_ready.get():
-                    import asyncio
-                    for _ in range(10):  # wait up to ~2s
-                        if mcp_ready.get():
-                            break
-                        await asyncio.sleep(0.2)
-                
-                selected_model = input.model_select()
-                print(f"🤖 Using {selected_model} with MCP tool calling...")
-                
-                # Get the response (not streaming for easier parsing)
-                response = await llm.chat_async(user_input)
-                
-                # Get the full response content
-                full_text = await response.get_content()
-                
-                # STEP 1: Display all tool requests FIRST
-                sales_data = None
-                tool_requests_found = False
-                try:
-                    # Use get_turns() to access the chat history
-                    from chatlas import ContentToolResult, ContentToolRequest
-                    
-                    # Get all turns from the chat
-                    turns = llm.get_turns()
-                    print(f"🔍 Found {len(turns)} turns in chat history")
-                    
-                    # Look through recent turns for tool requests and results
-                    # We check the last few turns as tool requests/results appear there
-                    for turn in turns[-3:]:
-                        print(f"🔍 Turn role: {turn.role}")
-                        if hasattr(turn, 'contents'):
-                            print(f"   - Turn has {len(turn.contents)} content items")
-                            for content in turn.contents:
-                                content_type = type(content).__name__
-                                print(f"   - Content type: {content_type}")
-                                
-                                # Display tool REQUEST with parameters
-                                if isinstance(content, ContentToolRequest):
-                                    tool_name = getattr(content, 'name', None)
-                                    tool_id = getattr(content, 'id', None)
-                                    tool_arguments = getattr(content, 'arguments', {})
-                                    
-                                    print(f"🔧 Found ContentToolRequest: {tool_name}")
-                                    tool_requests_found = True
-                                    
-                                    # Display the tool request in the chat
-                                    tool_request_msg = f"🔧 **Tool Request**: `{tool_name}`"
-                                    if tool_arguments:
-                                        tool_request_msg += f"\n📋 **Arguments**: `{json.dumps(tool_arguments)}`"
-                                    else:
-                                        tool_request_msg += f"\n📋 **Arguments**: `{{}}`"
-                                    
-                                    await chat.append_message(tool_request_msg)
-                                
-                                # Extract sales data from tool RESULT (don't display yet)
-                                if isinstance(content, ContentToolResult):
-                                    tool_name = getattr(content, 'name', None)
-                                    print(f"📊 Found ContentToolResult: {tool_name}")
-                                    
-                                    if tool_name == 'get_sales_data':
-                                        # Get the structured value
-                                        tool_value = content.value
-                                        print(f"🔍 Tool result type: {type(tool_value)}")
-                                        print(f"🔍 Tool result value: {tool_value[:200] if isinstance(tool_value, str) else tool_value}")
-                                        
-                                        # Parse the JSON from the tool result
-                                        import re
-                                        if isinstance(tool_value, str):
-                                            json_match = re.search(r'JSON:\s*(\[.*?\])', tool_value, re.DOTALL)
-                                            if json_match:
-                                                json_str = json_match.group(1)
-                                                json_str = ' '.join(json_str.split())
-                                                sales_data = json.loads(json_str)
-                                                print(f"✅ Extracted sales data: {len(sales_data)} products")
-                    
-                    if not sales_data and tool_requests_found:
-                        print(f"ℹ️  Tool requests found but no sales data extracted")
-                        
-                except Exception as parse_error:
-                    print(f"⚠️  Could not extract tool results: {parse_error}")
-                    import traceback
-                    print(traceback.format_exc())
-                
-                # STEP 2: If we found sales data, create and display the chart SECOND
-                if sales_data:
-                    print(f"📊 Detected sales data, creating chart...")
-                    try:
-                        # Create DataFrame
-                        df = pd.DataFrame(sales_data)
-                        
-                        # Create Plotly bar chart - let Plotly choose colors automatically
-                        fig = go.Figure(data=[
-                            go.Bar(
-                                x=df['Product'],
-                                y=df['Sales'],
-                                marker=dict(
-                                    color=df.index,  # Color by index to get different colors per bar
-                                    colorscale='Viridis',  # Use Plotly's color scale
-                                    showscale=False
-                                ),
-                                text=df['Sales'],
-                                textposition='auto',
-                            )
-                        ])
-                        
-                        fig.update_layout(
-                            title="📊 Sales Data Visualization",
-                            xaxis_title="Products",
-                            yaxis_title="Sales",
-                            showlegend=False,
-                            height=400,
-                            template="plotly_white"
-                        )
-                        
-                        # Increment counter for unique ID
-                        counter = chart_counter.get()
-                        chart_counter.set(counter + 1)
-                        chart_id = f"sales_chart_{counter}"
-                        
-                        # Create the render function with the figure
-                        @render_widget
-                        def make_chart():
-                            return fig
-                        
-                        # Append chart to chat using output_widget
-                        await chat.append_message(
-                            ui.div(
-                                output_widget(chart_id),
-                                class_="my-3"
-                            )
-                        )
-                        
-                        # Register the output
-                        output(id=chart_id)(make_chart)
-                            
-                        print(f"✅ Chart created with ID: {chart_id}")
-                    except Exception as chart_error:
-                        print(f"⚠️  Failed to create chart: {chart_error}")
-                        import traceback
-                        print(traceback.format_exc())
-                
-                # STEP 3: Finally, append the model's text response LAST
-                await chat.append_message(full_text)
-                
-                print(f"✅ Message completed")
-                
-            except Exception as e:
-                print(f"❌ LLM failed: {e}")
-                import traceback
-                print(f"🔍 DEBUG: Full traceback:\n{traceback.format_exc()}")
-                await chat.append_message(f"Sorry, I encountered an error: {str(e)}")
-        else:
+        if not llm:
             print("⚠️ No LLM available")
             await chat.append_message("Sorry, the LLM is not available. Please check the configuration.")
+            return
+
+        try:
+            # Ensure MCP tools are registered before first prompt
+            if not mcp_ready.get():
+                import asyncio
+                for _ in range(10):  # wait up to ~2s
+                    if mcp_ready.get():
+                        break
+                    await asyncio.sleep(0.2)
+            
+            selected_model = input.model_select()
+            print(f"🤖 Using {selected_model} with async streaming...")
+            
+            # Process the streaming response
+            full_text = ""
+            message_id = None
+            
+            # Create a generator function to handle the streaming
+            async def chunk_generator():
+                """Generator that processes chunks from the async stream"""
+                stream = await llm.stream_async(user_input, content="all")
+                async for chunk in stream:
+                    yield chunk
+                    
+                    # Check for ContentToolResult
+                    if hasattr(chunk, '__class__') and 'ContentToolResult' in str(chunk.__class__):
+                        tool_name = getattr(chunk, 'name', None)
+                        print(f"📊 Found ContentToolResult: {tool_name}")
+                        
+                        if tool_name == 'get_sales_data':
+                            # Get the structured value
+                            tool_value = getattr(chunk, 'value', chunk)
+                            print(f"🔍 Tool result type: {type(tool_value)}")
+                            print(f"🔍 Tool result value: {tool_value[:200] if isinstance(tool_value, str) else tool_value}")
+
+                            # Robust parsing for streamed/truncated JSON: accumulate text until we can
+                            # extract a balanced JSON array/object and parse it. Avoid calling json.loads
+                            # on partial strings which raises JSONDecodeError.
+                            if not hasattr(chunk_generator, '_json_buf'):
+                                chunk_generator._json_buf = ''
+
+                            # If value is already structured (list/dict), use it directly
+                            if isinstance(tool_value, (list, dict)):
+                                sales_data = tool_value
+                                print(f"✅ Received structured sales data ({len(sales_data)} items)")
+                            elif isinstance(tool_value, str):
+                                # Append to buffer and try to extract a JSON array or object
+                                chunk_generator._json_buf += tool_value
+                                buf = chunk_generator._json_buf
+
+                                def try_parse_candidate(s):
+                                    try:
+                                        return json.loads(s)
+                                    except Exception:
+                                        return None
+
+                                parsed = None
+
+                                # First try to find a balanced JSON array starting at first '['
+                                start = buf.find('[')
+                                if start != -1:
+                                    depth = 0
+                                    for idx in range(start, len(buf)):
+                                        ch = buf[idx]
+                                        if ch == '[':
+                                            depth += 1
+                                        elif ch == ']':
+                                            depth -= 1
+                                            if depth == 0:
+                                                candidate = buf[start:idx+1]
+                                                parsed = try_parse_candidate(candidate)
+                                                if parsed is not None:
+                                                    sales_data = parsed
+                                                    # remove consumed portion from buffer
+                                                    chunk_generator._json_buf = buf[idx+1:]
+                                                break
+
+                                # If not found, try to find a balanced JSON object starting at first '{'
+                                if parsed is None:
+                                    start_obj = buf.find('{')
+                                    if start_obj != -1:
+                                        depth = 0
+                                        for idx in range(start_obj, len(buf)):
+                                            ch = buf[idx]
+                                            if ch == '{':
+                                                depth += 1
+                                            elif ch == '}':
+                                                depth -= 1
+                                                if depth == 0:
+                                                    candidate = buf[start_obj:idx+1]
+                                                    parsed = try_parse_candidate(candidate)
+                                                    if parsed is not None:
+                                                        sales_data = parsed
+                                                        chunk_generator._json_buf = buf[idx+1:]
+                                                    break
+
+                                # As a last resort, try parsing the whole buffer
+                                if parsed is None:
+                                    whole = try_parse_candidate(buf)
+                                    if whole is not None and isinstance(whole, (list, dict)):
+                                        sales_data = whole
+                                        chunk_generator._json_buf = ''
+
+                                if parsed is None and not isinstance(tool_value, (list, dict)):
+                                    # Not enough data yet; wait for more chunks
+                                    sales_data = None
+                                        # No sales data available yet
+                                    
+                        if 'sales_data' in locals() and sales_data is not None:
+                            print(f"✅ Extracted sales data: {len(sales_data)} products")
+                            try:
+                                # Create and display the sales chart
+                                current_counter = chart_counter[0]
+                                chartchunk = _create_sales_chart(sales_data, current_counter)
+                                chart_counter[0] += 1
+                                print(f"📊 _create_sales_chart returned: {chartchunk}")
+                                if chartchunk:
+                                    yield chartchunk
+                            except Exception as e_chart:
+                                print(f"⚠️ Failed to render sales chart: {e_chart}")
+                    
+                                    
+            # Pass the generator directly to append_message_stream
+            await chat.append_message_stream(chunk_generator())
+            
+            print(f"✅ Message completed")
+            
+        except Exception as e:
+            print(f"❌ Error in handle_user_input: {e}")
+            import traceback
+            print(traceback.format_exc())
+            await chat.append_message(f"Sorry, I encountered an error: {str(e)}")
         
         # Record bot response time
         bot_time = datetime.datetime.now().strftime("%H:%M:%S")
@@ -398,7 +499,7 @@ def server(input, output, session):
         await chat.clear_messages()
         message_times.set([])
         # Add welcome message back
-        await chat.append_message("Hello! 👋 I'm your friendly chatbot. How can I help you today?")
+        await chat.append_message(welcome)
     
     @output
     @render.text
@@ -415,6 +516,22 @@ def server(input, output, session):
         if times:
             return f"Last message: {times[-1]}"
         return "No messages yet"
+
+    @output
+    @render.ui
+    def chat_history():
+        """Render chat history into the left sidebar"""
+        msgs = chat.messages()
+        # Render each message as a small card-like div
+        items = []
+        for i, m in enumerate(msgs):
+            # Keep messages short in the sidebar
+            text = m if isinstance(m, str) else str(m)
+            short = (text[:80] + '...') if len(text) > 80 else text
+            items.append(ui.div(ui.p(short, class_="mb-1"), class_="border rounded p-2 mb-2"))
+        if not items:
+            return ui.div(ui.p("No chat history yet."))
+        return ui.div(*items)
 
 # Create the app
 app = App(app_ui, server)
