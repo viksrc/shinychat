@@ -54,17 +54,15 @@ app_ui = ui.page_fluid(
             "model_select",
             "🤖 Select AI Model:",
             choices={
-                "anthropic/claude-opus-4": "Claude 4 Opus (Anthropic)",
-                "anthropic/claude-3.5-sonnet": "Claude 3.5 Sonnet (Anthropic)",
-                "openai/gpt-4o": "GPT-4o (OpenAI)",
-                "openai/gpt-oss-20b": "GPT-OSS-20B (OpenAI Open Source)",
-                "google/gemini-2.0-flash-exp:free": "Gemini 2.0 Flash (Google)",
-                "qwen/qwen-2.5-72b-instruct": "Qwen 2.5 72B (Alibaba)",
-                "z-ai/glm-4.5": "GLM-4.5 (Zhipu AI - FC)",
-                "z-ai/glm-4.5-air:free": "GLM-4.5 Air (Zhipu AI - Free)",
-                "deepseek/deepseek-chat": "DeepSeek Chat",
+                "openai/gpt-4o": "GPT-4o",
+                "openai/gpt-oss-120b": "GPT-OSS-120B",
+                "openai/gpt-4.1": "GPT-4.1",
+                "anthropic/claude-sonnet-4": "Claude Sonnet-4",
+                "deepseek/deepseek-chat-v3.1": "DeepSeek Chat v3.1",
+                "qwen/qwen3-30b-a3b": "Qwen3 30B",
+                "qwen/qwen3-30b-a3b-thinking-2507": "Qwen3 30B Thinking",
             },
-            selected="anthropic/claude-3.5-sonnet"
+            selected="openai/gpt-4o"
         ),
         class_="mb-3"
     ),
@@ -123,9 +121,22 @@ def server(input, output, session):
                 api_key=api_key,
                 # Instruct the model to use available tools
                 system_prompt=(
-                    "You are a helpful assistant. When the user asks for sales data or sales figures, "
-                    "use the 'get_sales_data' tool to retrieve the information. Always use tools available "
-                    "to you when they can help answer the user's question."
+                    "You are a helpful assistant with access to sales data tools. "
+                    "\n\nIMPORTANT: You do NOT know the current date. When users ask questions involving "
+                    "dates like 'last month', 'this year', 'last week', 'today', etc., you MUST first call "
+                    "the 'get_current_date' tool to find out what today's date is before answering."
+                    "\n\nAvailable tools:"
+                    "\n- get_current_date: Get today's date and time (use this when date context is needed)"
+                    "\n- get_sales_data: Retrieve sales data with optional filters:"
+                    "\n  * num_products: Number of products to return"
+                    "\n  * region: Filter by region (North, South, East, West)"
+                    "\n  * start_date: Start of date range (YYYY-MM-DD format)"
+                    "\n  * end_date: End of date range (YYYY-MM-DD format)"
+                    "\n\nExamples:"
+                    "\n- 'sales for last month' -> First get_current_date, then calculate date range, then get_sales_data"
+                    "\n- 'North region sales' -> get_sales_data with region='North'"
+                    "\n- 'sales from January to March 2024' -> get_sales_data with start_date='2024-01-01', end_date='2024-03-31'"
+                    "\n\nAlways use these tools when they can help answer the user's question."
                 )
             )
             print(f"✅ {model_name} initialized!")
@@ -178,7 +189,7 @@ def server(input, output, session):
                     args=["-u", server_path],
                     # Give this MCP session a stable name and namespace its tools
                     name="sales_mcp",
-                    include_tools=("get_sales_data",),
+                    include_tools=("get_sales_data", "get_current_date"),
                 )
                 # Debug: list registered tools so we can verify availability at runtime
                 try:
@@ -232,27 +243,46 @@ def server(input, output, session):
                 # Get the full response content
                 full_text = await response.get_content()
                 
-                # Append the text response to chat
-                await chat.append_message(full_text)
-                
-                # Check for tool results in the chat turns
+                # STEP 1: Display all tool requests FIRST
                 sales_data = None
+                tool_requests_found = False
                 try:
                     # Use get_turns() to access the chat history
-                    from chatlas import ContentToolResult
+                    from chatlas import ContentToolResult, ContentToolRequest
                     
                     # Get all turns from the chat
                     turns = llm.get_turns()
                     print(f"🔍 Found {len(turns)} turns in chat history")
                     
-                    # Look through recent turns for tool results
-                    # We check the last few turns as tool results appear there
+                    # Look through recent turns for tool requests and results
+                    # We check the last few turns as tool requests/results appear there
                     for turn in turns[-3:]:
                         print(f"🔍 Turn role: {turn.role}")
                         if hasattr(turn, 'contents'):
                             print(f"   - Turn has {len(turn.contents)} content items")
                             for content in turn.contents:
-                                print(f"   - Content type: {type(content).__name__}")
+                                content_type = type(content).__name__
+                                print(f"   - Content type: {content_type}")
+                                
+                                # Display tool REQUEST with parameters
+                                if isinstance(content, ContentToolRequest):
+                                    tool_name = getattr(content, 'name', None)
+                                    tool_id = getattr(content, 'id', None)
+                                    tool_arguments = getattr(content, 'arguments', {})
+                                    
+                                    print(f"🔧 Found ContentToolRequest: {tool_name}")
+                                    tool_requests_found = True
+                                    
+                                    # Display the tool request in the chat
+                                    tool_request_msg = f"🔧 **Tool Request**: `{tool_name}`"
+                                    if tool_arguments:
+                                        tool_request_msg += f"\n📋 **Arguments**: `{json.dumps(tool_arguments)}`"
+                                    else:
+                                        tool_request_msg += f"\n📋 **Arguments**: `{{}}`"
+                                    
+                                    await chat.append_message(tool_request_msg)
+                                
+                                # Extract sales data from tool RESULT (don't display yet)
                                 if isinstance(content, ContentToolResult):
                                     tool_name = getattr(content, 'name', None)
                                     print(f"📊 Found ContentToolResult: {tool_name}")
@@ -272,19 +302,16 @@ def server(input, output, session):
                                                 json_str = ' '.join(json_str.split())
                                                 sales_data = json.loads(json_str)
                                                 print(f"✅ Extracted sales data: {len(sales_data)} products")
-                                                break
-                        if sales_data:
-                            break
                     
-                    if not sales_data:
-                        print(f"ℹ️  No ContentToolResult found for sales data")
+                    if not sales_data and tool_requests_found:
+                        print(f"ℹ️  Tool requests found but no sales data extracted")
                         
                 except Exception as parse_error:
                     print(f"⚠️  Could not extract tool results: {parse_error}")
                     import traceback
                     print(traceback.format_exc())
                 
-                # If we found sales data, create a chart
+                # STEP 2: If we found sales data, create and display the chart SECOND
                 if sales_data:
                     print(f"📊 Detected sales data, creating chart...")
                     try:
@@ -341,6 +368,9 @@ def server(input, output, session):
                         print(f"⚠️  Failed to create chart: {chart_error}")
                         import traceback
                         print(traceback.format_exc())
+                
+                # STEP 3: Finally, append the model's text response LAST
+                await chat.append_message(full_text)
                 
                 print(f"✅ Message completed")
                 

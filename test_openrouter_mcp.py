@@ -117,12 +117,15 @@ async def main():
     """Test multiple models via OpenRouter"""
     print("\n" + "🧪 Testing MCP Tools with OpenRouter".center(70))
     
-    # Test various models available via OpenRouter
+    # Test various models available via OpenRouter (7 models - added GPT-4o)
     models_to_test = [
-        "anthropic/claude-3.5-sonnet",      # Claude (should work well)
-        "openai/gpt-4o",                     # GPT-4o
-        "google/gemini-2.0-flash-exp",       # Gemini via OpenRouter
-        "meta-llama/llama-3.3-70b-instruct", # Llama
+        "anthropic/claude-sonnet-4",
+        "openai/gpt-4o",
+        "openai/gpt-4.1",
+        "openai/gpt-oss-120b",
+        "qwen/qwen3-30b-a3b",
+        "qwen/qwen3-30b-a3b-thinking-2507",
+        "deepseek/deepseek-chat-v3.1",
     ]
     
     results = {}

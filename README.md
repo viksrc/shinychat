@@ -2,6 +2,40 @@
 
 A beautiful, interactive chat application built with Python Shiny featuring real-time messaging, LLM integration with ChatLas, MCP server for data, and inline Plotly charts.
 
+## Table of Contents
+
+- [Quick Start](#quick-start)
+- [Features](#features)
+- [Installation](#installation)
+- [Running the Application](#running-the-application)
+- [Running Tests](#running-tests)
+- [How to Use](#how-to-use)
+- [Architecture](#architecture)
+- [Project Structure](#project-structure)
+- [Technical Details](#technical-details)
+- [Customization](#customization)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
+
+## Quick Start
+
+```bash
+# Setup
+git clone https://github.com/viksrc/shinychat.git
+cd shinychat
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# Run the app
+./start_app.sh
+
+# Run tests
+python test_mcp_median.py
+```
+
 ## Features
 
 - 💬 **Interactive Chat Interface**: Clean, modern chat UI with `ui.Chat` component
@@ -15,25 +49,119 @@ A beautiful, interactive chat application built with Python Shiny featuring real
 
 ## Installation
 
-1. Make sure you have Python 3.7+ installed
-2. Install the required packages:
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/viksrc/shinychat.git
+   cd shinychat
+   ```
+
+2. **Create a virtual environment** (recommended):
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+   ```
+
+3. **Install dependencies**:
    ```bash
    pip install -r requirements.txt
    ```
 
-3. (Optional) Set your OpenAI API key for LLM features:
+4. **Set up API keys**:
+   
+   For the Shiny app (OpenRouter):
    ```bash
-   export OPENAI_API_KEY="your-api-key-here"
+   export OPENROUTER_API_KEY="your-openrouter-api-key-here"
    ```
+   
+   Or use the provided start script (see below).
 
-## Running the App
+## Running the Application
 
-1. Navigate to the project directory
-2. Run the application:
-   ```bash
-   shiny run app.py --reload
-   ```
-3. Open your browser and go to `http://127.0.0.1:8000`
+### Quick Start
+
+Use the provided start script that includes the API key:
+```bash
+chmod +x start_app.sh
+./start_app.sh
+```
+
+### Manual Start
+
+```bash
+source .venv/bin/activate
+shiny run app.py --reload
+```
+
+Then open your browser to `http://127.0.0.1:8000`
+
+### Stopping the Application
+
+Press `Ctrl+C` in the terminal, or:
+```bash
+pkill -f "shiny run"
+```
+
+## Running Tests
+
+### Latency Comparison Tests
+
+Test multiple LLM models for tool-calling performance:
+
+**Full test suite** (7 models, 3 runs each, ~30 seconds):
+```bash
+source .venv/bin/activate
+python test_mcp_median.py
+```
+
+**Clean output** (filters async cleanup errors):
+```bash
+chmod +x test_mcp_median_clean.sh
+./test_mcp_median_clean.sh
+```
+
+**Test specific model**:
+```bash
+python test_gpt_oss_only.py  # Tests only openai/gpt-oss-120b
+```
+
+### Other Test Scripts
+
+**Validate API keys**:
+```bash
+python test_api_keys.py
+```
+
+**Quick MCP test**:
+```bash
+python test_mcp_quick.py
+```
+
+**Inspect MCP functionality**:
+```bash
+python test_mcp_inspect.py
+```
+
+**Debug specific models**:
+```bash
+python debug_deepseek_failure.py  # DeepSeek reliability analysis
+python debug_qwen_failure.py      # Qwen JSON generation issues
+```
+
+### Test Results
+
+Current model performance (median latency, success rate):
+
+| Rank | Model | Latency | Success |
+|------|-------|---------|---------|
+| 🥇 | openai/gpt-4o | 2.2s | 3/3 (100%) |
+| 🥈 | openai/gpt-oss-120b | 3.3s | 3/3 (100%) |
+| 🥉 | openai/gpt-4.1 | 3.8s | 3/3 (100%) |
+| | anthropic/claude-sonnet-4 | 4.8s | 3/3 (100%) |
+| | deepseek/deepseek-chat-v3.1 | 6.0s | 2/3 (67%) |
+| | qwen/qwen3-30b-a3b | 9.0s | 0/3 (0%) |
+| | qwen/qwen3-30b-a3b-thinking | 10.7s | 1/3 (33%) |
+
+**Note**: Async generator cleanup errors in parallel tests are cosmetic only. See `MCP_CLEANUP_ISSUE.md` for details.
 
 ## How to Use
 
@@ -89,11 +217,32 @@ The bot responds to various keywords:
 
 ```
 shiny/
-├── app.py                  # Main Shiny application
-├── mcp_sales_server.py    # MCP server for sales data
-├── MCP_README.md          # MCP server documentation
-├── README.md              # This documentation
-└── requirements.txt       # Python dependencies
+├── app.py                          # Main Shiny application
+├── start_app.sh                    # Script to start app with API key
+│
+├── mcp_sales_server.py             # MCP server for sales data
+├── mcp_sales_server_no_args.py     # Simplified MCP server
+│
+├── test_mcp_median.py              # Parallel latency tests (7 models)
+├── test_mcp_median_clean.sh        # Filtered output wrapper
+├── test_gpt_oss_only.py            # Single model test
+├── test_mcp_quick.py               # Quick MCP functionality test
+├── test_mcp_inspect.py             # MCP inspection tool
+├── test_openrouter_mcp.py          # OpenRouter MCP integration test
+├── test_api_keys.py                # API key validator
+│
+├── debug_deepseek_failure.py       # DeepSeek reliability analysis
+├── debug_qwen_failure.py           # Qwen JSON error debugging
+├── debug_tool_calling.py           # Tool calling inspector
+│
+├── README.md                       # This documentation
+├── MCP_README.md                   # MCP server documentation
+├── MCP_CLEANUP_ISSUE.md            # Async cleanup error explanation
+├── QUICKSTART.md                   # Quick start guide
+├── TEST_FRAMEWORK_README.md        # Testing framework docs
+├── SOLUTION_SUMMARY.md             # Technical solution summary
+│
+└── requirements.txt                # Python dependencies
 ```
 
 ## Technical Details
