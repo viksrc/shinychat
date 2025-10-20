@@ -9,6 +9,7 @@ from chatlas import ChatOpenRouter
 import os
 import sys
 from pathlib import Path
+import time
 
 welcome = """
 **Welcome to Sales Analytics!** How can I assist you with your sales data today?
@@ -25,101 +26,51 @@ Here are some suggestions:
 
 # Define the UI
 app_ui = ui.page_fluid(
-    # Custom CSS for styling
-    ui.tags.head(
-        ui.tags.style("""
-            .sidebar {
-                border-right: 1px solid #ddd;
-                padding: 15px;
-                height: 100%;
-                overflow-y: auto;
-            }
-            .chat-header {
-                background-color: #f8f9fa;
-                padding: 15px;
-                border-bottom: 1px solid #ddd;
-                text-align: center;
-            }
-            .chat-container {
-                height: 500px;
-                border: 1px solid #ddd;
-                border-radius: 10px;
-                padding: 10px;
-                margin-bottom: 20px;
-                overflow-y: auto;
-            }
-            .chat-footer {
-                position: sticky;
-                bottom: 0;
-                background: white;
-                padding: 8px 12px;
-                border-top: 1px solid #e9ecef;
-            }
-            .suggestion {
-                display: inline-block;
-                color: #007bff;
-                text-decoration: underline;
-                cursor: pointer;
-                font-size: 0.9em;
-                margin: 2px;
-            }
-            .suggestion:hover {
-                color: #0056b3;
-            }
-            /* Sidebar chat history styling */
-            .sidebar-msg {
-                font-weight: 600; /* bold */
-                padding: 6px 0;
-                margin: 0;
-            }
-            .sidebar-sep {
-                border: none;
-                border-top: 1px solid #f0f0f0; /* very light gray */
-                margin: 6px 0;
-            }
-        """
-    )),
-    
-    # Layout with a left sidebar using Shiny's layout_sidebar
     ui.layout_sidebar(
         ui.sidebar(
             ui.h5("Chat History"),
-            ui.div(ui.input_action_button("new_chat", "New Chat"), class_="mb-3"),
+            ui.div(ui.input_action_button("new_chat", "New Chat", style=(
+                "background: linear-gradient(90deg, #2b6cb0 0%, #3182ce 50%, #63b3ed 100%);"
+                "color: white; border: none; padding: 8px 12px; border-radius: 6px;"
+            )), class_="mb-3"),
             ui.output_ui("chat_history"),
             id="sidebar_left",
             open="desktop",
         ),
-
-        # Main chat area
-        ui.div(
-            ui.div(
-                ui.div(
-                    ui.h4("ST Trader Copilot", class_="mb-2"),
-                    ui.p("Hello! How can I help you with pretrade trading cost estimates and posttrade realized transaction cost analytics (TCA)?", class_="mb-3"),
-                    class_="chat-header"
+        ui.card(
+            ui.card_header(
+                ui.h4("Sales Analytics Copilot", style="color: white; margin: 0;"),
+                style=("background: linear-gradient(90deg, #2b6cb0 0%, #3182ce 50%, #63b3ed 100%);"
+                       "padding: 12px 16px; border-radius: 6px 6px 0 0;")
+            ),
+            ui.card_body(
+                ui.chat_ui(
+                    id="chat",
+                    messages=[welcome],
+                    style="width: 100%; height: 100%;",
                 ),
-                ui.div(
-                    ui.chat_ui(
-                        id="chat",
-                        messages=["**Welcome to Sales Analytics!** How can I assist you with your sales data today?"],
-                    ),
-                    class_="chat-container"
-                ),
-                ui.div(
-                    ui.div(ui.input_select("model_select", "Select LLM", choices=[
-                        "anthropic/claude-sonnet-4",
-                        "openai/gpt-4o",
-                        "openai/gpt-4.1",
-                        "openai/gpt-oss-120b",
-                        "qwen/qwen3-30b-a3b",
-                        "qwen/qwen3-30b-a3b-thinking-2507",
-                        "deepseek/deepseek-chat-v3.1",
-                    ]), class_="ms-2"),
-                    ui.div(ui.input_select("prompt_select", "Select Prompt", choices=["What is the cost to buy 10000 shares of AAPL?", "Generate a sales report for Q3"]), class_="ms-2"),
-                    ui.div(ui.input_switch("display_func_calls", "Display Func Calls", value=True), class_="ms-2"),
-                    class_="chat-footer d-flex align-items-center"
-                )
-            )
+                style="flex: 1 1 auto; min-height: 0; overflow-y: auto;",
+            ),
+            ui.card_footer(
+                ui.input_select("model_select", "Select LLM", choices=[
+                    "anthropic/claude-sonnet-4",
+                    "openai/gpt-4o",
+                    "openai/gpt-4.1",
+                    "openai/gpt-oss-120b",
+                    "qwen/qwen3-30b-a3b",
+                    "qwen/qwen3-30b-a3b-thinking-2507",
+                    "deepseek/deepseek-chat-v3.1",
+                ]),
+                ui.input_select("prompt_select", "Select Prompt", choices=[
+                    "What is the cost to buy 10000 shares of AAPL?",
+                    "Generate a sales report for Q3"
+                ]),
+                ui.input_switch("display_func_calls", "Display Func Calls", value=True),
+                ui.input_switch("disable_plots", "Disable Plots", value=False),
+                class_="bg-light d-flex justify-content-between align-items-center"
+            ),
+            full_screen=True,
+            style="flex: 1 1 auto; width: 100%; display: flex; flex-direction: column; height: 100vh;",
         )
     )
 )
@@ -134,8 +85,8 @@ def server(input, output, session):
             # Create DataFrame
             df = pd.DataFrame(sales_data)
             
-            # Create a unique ID for the chart
-            chart_id = f"sales_chart_{chart_counter_value}"
+            # Create a unique ID for the chart (include timestamp to avoid collisions)
+            chart_id = f"sales_chart_{chart_counter_value}_{int(time.time() * 1000)}"
             
             # Create Plotly bar chart
             fig = go.Figure(data=[
@@ -157,18 +108,18 @@ def server(input, output, session):
                 template="plotly_white"
             )
             
-            # Use the provided counter value for unique ID
-            chart_id = f"sales_chart_{chart_counter_value}"
+            # Ensure uniqueness (include timestamp)
+            chart_id = f"sales_chart_{chart_counter_value}_{int(time.time() * 1000)}"
             
             # Create the render function with the figure
             @render_widget
             def make_chart():
                 return fig
-            
-             # Register the output
+
+            # Register the output
             output(id=chart_id)(make_chart)
 
-            msg = ui.div(output_widget(chart_id),class_="my-3")
+            msg = ui.div(output_widget(chart_id), class_="my-3")
           
             return msg
             
@@ -197,28 +148,15 @@ def server(input, output, session):
             if not api_key:
                 raise ValueError("OPENROUTER_API_KEY environment variable is required")
             
+            # Read system prompt from file
+            system_prompt_path = Path(__file__).parent / "system-prompt.md"
+            with open(system_prompt_path, 'r') as f:
+                system_prompt = f.read().strip()
+            
             llm = ChatOpenRouter(
                 model=model_name,
                 api_key=api_key,
-                # Instruct the model to use available tools
-                system_prompt=(
-                    "You are a helpful assistant with access to sales data tools. "
-                    "\n\nIMPORTANT: You do NOT know the current date. When users ask questions involving "
-                    "dates like 'last month', 'this year', 'last week', 'today', etc., you MUST first call "
-                    "the 'get_current_date' tool to find out what today's date is before answering."
-                    "\n\nAvailable tools:"
-                    "\n- get_current_date: Get today's date and time (use this when date context is needed)"
-                    "\n- get_sales_data: Retrieve sales data with optional filters:"
-                    "\n  * num_products: Number of products to return"
-                    "\n  * region: Filter by region (North, South, East, West)"
-                    "\n  * start_date: Start of date range (YYYY-MM-DD format)"
-                    "\n  * end_date: End of date range (YYYY-MM-DD format)"
-                    "\n\nExamples:"
-                    "\n- 'sales for last month' -> First get_current_date, then calculate date range, then get_sales_data"
-                    "\n- 'North region sales' -> get_sales_data with region='North'"
-                    "\n- 'sales from January to March 2024' -> get_sales_data with start_date='2024-01-01', end_date='2024-03-31'"
-                    "\n\nAlways use these tools when they can help answer the user's question."
-                )
+                system_prompt=system_prompt
             )
             print(f"✅ {model_name} initialized!")
             return llm
@@ -234,6 +172,16 @@ def server(input, output, session):
     
     # Store the current LLM instance
     current_llm.set(llm)
+    
+    # Persisted chat sessions (history) that survive new chats
+    chat_sessions = reactive.value([])
+    
+    # Track message timestamps
+    message_times = reactive.value([])
+    
+    # Counter for unique chart IDs (non-reactive)
+    # Using a list to make it mutable in nested scopes
+    chart_counter = [0]
     
     # React to model selection changes
     @reactive.effect
@@ -254,6 +202,84 @@ def server(input, output, session):
             print("ℹ️ Model switched; preserving existing chat messages.")
         else:
             await chat.append_message(f"⚠️ Failed to switch to {selected_model}")
+
+    # React to prompt selection changes
+    @reactive.effect
+    @reactive.event(input.prompt_select)
+    def _on_prompt_select():
+        """Handle prompt selection changes by setting the chat input"""
+        selected_prompt = input.prompt_select()
+        if selected_prompt:
+            # Update the chat input value
+            chat.update_user_input(value=selected_prompt)
+
+
+    @reactive.effect
+    @reactive.event(input.new_chat)
+    async def _handle_new_chat():
+        """Create a new LLM instance and clear the chat UI when New Chat is clicked."""
+        selected_model = input.model_select()
+        print(f"✨ New Chat requested; creating new LLM: {selected_model}")
+
+        # Before creating the new LLM, capture a short summary of the current chat
+        try:
+            msgs = chat.messages()
+            first_user_msg = None
+            if msgs:
+                for m in msgs:
+                    if isinstance(m, str):
+                        if m.strip():
+                            first_user_msg = m
+                            break
+                    else:
+                        try:
+                            role = getattr(m, 'role', None) if not isinstance(m, dict) else m.get('role')
+                            content = getattr(m, 'content', None) if not isinstance(m, dict) else m.get('content')
+                            if role and role == 'user' and content:
+                                first_user_msg = content
+                                break
+                            if content and not role:
+                                first_user_msg = content
+                                break
+                        except Exception:
+                            s = str(m)
+                            if s.strip():
+                                first_user_msg = s
+                                break
+
+            if first_user_msg and not first_user_msg.startswith("**Welcome"):
+                display_text = first_user_msg if isinstance(first_user_msg, str) else str(first_user_msg)
+                short = (display_text[:200] + '...') if len(display_text) > 200 else display_text
+                sessions = chat_sessions.get() or []
+                sessions.insert(0, {"summary": short, "model": selected_model, "time": datetime.datetime.now().isoformat()})
+                chat_sessions.set(sessions)
+        except Exception as e:
+            print(f"ℹ️ Could not capture prior chat for history: {e}")
+
+        # Create new LLM instance
+        new_llm = create_llm(selected_model)
+        if not new_llm:
+            await chat.append_message(f"⚠️ Failed to create new LLM: {selected_model}")
+            return
+
+        # Replace the current LLM and reset MCP registration so tools will be re-registered
+        current_llm.set(new_llm)
+        mcp_ready.set(False)
+
+        # Reset UI/chat state: clear messages and re-append the welcome prompt
+        try:
+            await chat.clear_messages()
+            await chat.append_message(welcome)
+            # Reset any non-reactive counters (charts)
+            try:
+                chart_counter[0] = 0
+            except Exception:
+                pass
+            print("✅ New chat started and UI cleared.")
+        except Exception as e:
+            print(f"⚠️ Failed to clear or initialize chat UI: {e}")
+            import traceback
+            print(traceback.format_exc())
 
     
 
@@ -289,13 +315,6 @@ def server(input, output, session):
                 import traceback
                 print(f"🔍 DEBUG: Full traceback:\n{traceback.format_exc()}")
     
-    # Track message timestamps
-    message_times = reactive.value([])
-    
-    # Counter for unique chart IDs (non-reactive)
-    # Using a list to make it mutable in nested scopes
-    chart_counter = [0]
-    
     # Removed the separate process_streaming_response method since we've inlined it
 
     @chat.on_user_submit
@@ -328,12 +347,15 @@ def server(input, output, session):
             selected_model = input.model_select()
             print(f"🤖 Using {selected_model} with async streaming...")
             
+            # Read reactive values before extended task
+            disable_plots = input.disable_plots()
+            
             # Process the streaming response
             full_text = ""
             message_id = None
             
             # Create a generator function to handle the streaming
-            async def chunk_generator():
+            async def chunk_generator(disable_plots):
                 """Generator that processes chunks from the async stream"""
                 stream = await llm.stream_async(user_input, content="all")
                 async for chunk in stream:
@@ -425,20 +447,23 @@ def server(input, output, session):
                                     
                         if 'sales_data' in locals() and sales_data is not None:
                             print(f"✅ Extracted sales data: {len(sales_data)} products")
-                            try:
-                                # Create and display the sales chart
-                                current_counter = chart_counter[0]
-                                chartchunk = _create_sales_chart(sales_data, current_counter)
-                                chart_counter[0] += 1
-                                print(f"📊 _create_sales_chart returned: {chartchunk}")
-                                if chartchunk:
-                                    yield chartchunk
-                            except Exception as e_chart:
-                                print(f"⚠️ Failed to render sales chart: {e_chart}")
+                            if not disable_plots:
+                                try:
+                                    # Create and display the sales chart
+                                    current_counter = chart_counter[0]
+                                    chartchunk = _create_sales_chart(sales_data, current_counter)
+                                    chart_counter[0] += 1
+                                    print(f"📊 _create_sales_chart returned: {chartchunk}")
+                                    if chartchunk:
+                                        yield chartchunk
+                                except Exception as e_chart:
+                                    print(f"⚠️ Failed to render sales chart: {e_chart}")
+                            else:
+                                print("📊 Plots disabled, skipping chart creation")
                     
                                     
             # Pass the generator directly to append_message_stream
-            await chat.append_message_stream(chunk_generator())
+            await chat.append_message_stream(chunk_generator(disable_plots))
             
             print(f"✅ Message completed")
             
@@ -476,46 +501,61 @@ def server(input, output, session):
     @render.ui
     def chat_history():
         """Render chat history into the left sidebar"""
+        # Force reactive dependencies so this output reruns when new messages arrive
+        _ = message_times.get()
+        try:
+            # chat.messages() may be reactive; call it to register a dependency
+            _ = chat.messages()
+        except Exception:
+            # If chat.messages() isn't available as a reactive, ignore and continue
+            pass
+
+        # Combine persisted sessions (from chat_sessions) and the current chat's first user message
+        sessions = chat_sessions.get() or []
+
+        # Compute first user message from current chat (if any)
+        current_first = None
         msgs = chat.messages()
-        # If there is at least one user message, show it prominently at the top
-        items = []
-        first_user_msg = None
         if msgs:
-            # Try to find the first message that appears to be from the user.
-            # Messages may be strings or objects; handle both.
             for m in msgs:
                 if isinstance(m, str):
-                    # Use the first non-empty string
-                    if m.strip():
-                        first_user_msg = m
+                    if not m.startswith("**Welcome") and m.strip():
+                        current_first = m
                         break
                 else:
-                    # If it's dict-like, look for common keys
                     try:
                         role = getattr(m, 'role', None) if not isinstance(m, dict) else m.get('role')
                         content = getattr(m, 'content', None) if not isinstance(m, dict) else m.get('content')
                         if role and role == 'user' and content:
-                            first_user_msg = content
+                            current_first = content
                             break
-                        # fallback: if content exists and no role, take it
                         if content and not role:
-                            first_user_msg = content
+                            current_first = content
                             break
                     except Exception:
-                        # last-resort string conversion
                         s = str(m)
                         if s.strip():
-                            first_user_msg = s
+                            current_first = s
                             break
 
-        if first_user_msg:
-            display_text = first_user_msg if isinstance(first_user_msg, str) else str(first_user_msg)
+        # Build UI: show current chat first (if exists), then previous sessions
+        children = []
+        if current_first:
+            display_text = current_first if isinstance(current_first, str) else str(current_first)
             short = (display_text[:200] + '...') if len(display_text) > 200 else display_text
-            # Only display the first user message, bold, with a light separator below
-            return ui.div(
-                ui.p(short, class_="sidebar-msg"),
-                ui.tags.hr(class_="sidebar-sep")
-            )
+            children.append(ui.p(short, class_="sidebar-msg"))
+            children.append(ui.tags.hr(class_="sidebar-sep"))
+
+        if sessions:
+            # Render a small list of previous chats
+            for s in sessions:
+                # Each session dict contains: summary, model, time
+                label = f"{s.get('summary')}" if s.get('summary') else "(no summary)"
+                model = s.get('model', '')
+                children.append(ui.p(f"{label} ", class_="sidebar-msg"))
+                children.append(ui.tags.hr(class_="sidebar-sep"))
+
+            return ui.div(*children)
 
         return ui.div(ui.p("No chat history yet.", class_="sidebar-msg"))
     
