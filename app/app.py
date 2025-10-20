@@ -11,16 +11,41 @@ import sys
 from pathlib import Path
 import time
 
-welcome = """
+# Read suggested prompts from file
+def load_suggested_prompts():
+    """Load suggested prompts from the markdown file"""
+    prompts_path = Path(__file__).parent / "suggested-prompts.md"
+    try:
+        with open(prompts_path, 'r') as f:
+            lines = f.readlines()
+        # Skip the header line and empty lines, strip whitespace
+        prompts = [line.strip() for line in lines[1:] if line.strip()]
+        return prompts
+    except Exception as e:
+        print(f"⚠️ Failed to load suggested prompts: {e}")
+        return [
+            "Show me sales by region",
+            "What's the best performing product?",
+            "Generate a sales report for Q3",
+            "Compare this month's sales to last month",
+            "Show me the sales trend for the past 6 months"
+        ]
+
+# Load all suggested prompts
+all_suggested_prompts = load_suggested_prompts()
+
+# Create welcome message with first 5 suggestions
+welcome_suggestions = "\n".join([
+    f"* <span class=\"suggestion submit\">{prompt}</span>"
+    for prompt in all_suggested_prompts[:5]
+])
+
+welcome = f"""
 **Welcome to Sales Analytics!** How can I assist you with your sales data today?
 
 Here are some suggestions:
 
-* <span class="suggestion submit">Show me sales by region</span>
-* <span class="suggestion submit">What's the best performing product?</span>
-* <span class="suggestion submit">Generate a sales report for Q3</span>
-* <span class="suggestion submit">Compare this month's sales to last month</span>
-* <span class="suggestion submit">Show me the sales trend for the past 6 months</span>
+{welcome_suggestions}
 """
 
 
@@ -61,10 +86,7 @@ app_ui = ui.page_fluid(
                     "qwen/qwen3-30b-a3b-thinking-2507",
                     "deepseek/deepseek-chat-v3.1",
                 ]),
-                ui.input_select("prompt_select", "Select Prompt", choices=[
-                    "What is the cost to buy 10000 shares of AAPL?",
-                    "Generate a sales report for Q3"
-                ]),
+                ui.input_select("prompt_select", "Select Prompt", choices=all_suggested_prompts),
                 ui.input_switch("display_func_calls", "Display Func Calls", value=True),
                 ui.input_switch("disable_plots", "Disable Plots", value=False),
                 class_="bg-light d-flex justify-content-between align-items-center"
