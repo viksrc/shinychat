@@ -22,35 +22,39 @@ Here are some suggestions:
 * <span class="suggestion submit">Show me the sales trend for the past 6 months</span>
 """
 
+
 # Define the UI
 app_ui = ui.page_fluid(
-    # Custom CSS for chat styling
+    # Custom CSS for styling
     ui.tags.head(
         ui.tags.style("""
+            .sidebar {
+                border-right: 1px solid #ddd;
+                padding: 15px;
+                height: 100%;
+                overflow-y: auto;
+            }
             .chat-header {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-                padding: 20px;
-                border-radius: 10px;
-                margin-bottom: 20px;
+                background-color: #f8f9fa;
+                padding: 15px;
+                border-bottom: 1px solid #ddd;
                 text-align: center;
             }
-            
             .chat-container {
                 height: 500px;
                 border: 1px solid #ddd;
                 border-radius: 10px;
                 padding: 10px;
                 margin-bottom: 20px;
+                overflow-y: auto;
             }
-            
-            .stats-panel {
-                margin-top: 20px;
-                padding: 15px;
-                background-color: #f8f9fa;
-                border-radius: 10px;
+            .chat-footer {
+                position: sticky;
+                bottom: 0;
+                background: white;
+                padding: 8px 12px;
+                border-top: 1px solid #e9ecef;
             }
-            
             .suggestion {
                 display: inline-block;
                 color: #007bff;
@@ -62,106 +66,62 @@ app_ui = ui.page_fluid(
             .suggestion:hover {
                 color: #0056b3;
             }
-            .chat-body-wrapper {
-                max-height: 420px;
-                overflow-y: auto;
-                padding-right: 8px;
+            /* Sidebar chat history styling */
+            .sidebar-msg {
+                font-weight: 600; /* bold */
+                padding: 6px 0;
+                margin: 0;
             }
+            .sidebar-sep {
+                border: none;
+                border-top: 1px solid #f0f0f0; /* very light gray */
+                margin: 6px 0;
+            }
+        """
+    )),
+    
+    # Layout with a left sidebar using Shiny's layout_sidebar
+    ui.layout_sidebar(
+        ui.sidebar(
+            ui.h5("Chat History"),
+            ui.div(ui.input_action_button("new_chat", "New Chat"), class_="mb-3"),
+            ui.output_ui("chat_history"),
+            id="sidebar_left",
+            open="desktop",
+        ),
 
-            .chat-footer {
-                position: sticky;
-                bottom: 0;
-                background: white;
-                padding: 8px 12px;
-                border-top: 1px solid #e9ecef;
-            }
-        """)
-    ),
-    
-    # Header
-    ui.div(
-        ui.h1("🚀 Python Shiny Chat App", class_="mb-2"),
-        ui.p("Welcome to your interactive chat application!", class_="mb-0"),
-        class_="chat-header"
-    ),
-    
-    # Model selector
-    ui.div(
-        ui.input_select(
-            "model_select",
-            "🤖 Select AI Model:",
-            choices={
-                "openai/gpt-4o": "GPT-4o",
-                "openai/gpt-oss-120b": "GPT-OSS-120B",
-                "openai/gpt-4.1": "GPT-4.1",
-                "anthropic/claude-sonnet-4": "Claude Sonnet-4",
-                "deepseek/deepseek-chat-v3.1": "DeepSeek Chat v3.1",
-                "qwen/qwen3-30b-a3b": "Qwen3 30B",
-                "qwen/qwen3-30b-a3b-thinking-2507": "Qwen3 30B Thinking",
-            },
-            selected="openai/gpt-4o"
-        ),
-        class_="mb-3"
-    ),
-    
-    # Two-column layout: left sidebar for history, right for chat card
-    ui.div(
-        ui.row(
-            ui.column(3,
+        # Main chat area
+        ui.div(
+            ui.div(
                 ui.div(
-                    ui.h5("Chat History"),
-                    ui.output_ui("chat_history"),
-                    class_="p-2",
+                    ui.h4("ST Trader Copilot", class_="mb-2"),
+                    ui.p("Hello! How can I help you with pretrade trading cost estimates and posttrade realized transaction cost analytics (TCA)?", class_="mb-3"),
+                    class_="chat-header"
                 ),
-                class_="border-end",
-            ),
-            ui.column(9,
-                ui.card(
-                    ui.card_header(
-                        ui.h5("Welcome to Sales Analytics", class_="mb-0"),
-                        ui.tooltip(
-                            ui.tags.span("?"),
-                            "This chat is brought to you by Sales Analytics."
-                        ),
-                        class_="d-flex justify-content-between align-items-center"
+                ui.div(
+                    ui.chat_ui(
+                        id="chat",
+                        messages=["**Welcome to Sales Analytics!** How can I assist you with your sales data today?"],
                     ),
-                    ui.card_body(
-                                ui.div(
-                                    ui.chat_ui(
-                                        id="chat",
-                                        messages=[welcome],
-                                    ),
-                                    class_="chat-body-wrapper",
-                                ),
-                    ),
-                            # Sticky footer with clear button so it remains visible next to the input
-                            ui.card_footer(
-                                ui.div(
-                                    ui.input_action_button(
-                                        "clear_chat",
-                                        "🗑️ Clear Chat",
-                                        class_="btn btn-danger btn-sm"
-                                    ),
-                                    class_="d-flex justify-content-end w-100"
-                                ),
-                                class_="chat-footer"
-                            ),
-                    class_="mb-3"
+                    class_="chat-container"
                 ),
-                class_="chat-container"
+                ui.div(
+                    ui.div(ui.input_select("model_select", "Select LLM", choices=[
+                        "anthropic/claude-sonnet-4",
+                        "openai/gpt-4o",
+                        "openai/gpt-4.1",
+                        "openai/gpt-oss-120b",
+                        "qwen/qwen3-30b-a3b",
+                        "qwen/qwen3-30b-a3b-thinking-2507",
+                        "deepseek/deepseek-chat-v3.1",
+                    ]), class_="ms-2"),
+                    ui.div(ui.input_select("prompt_select", "Select Prompt", choices=["What is the cost to buy 10000 shares of AAPL?", "Generate a sales report for Q3"]), class_="ms-2"),
+                    ui.div(ui.input_switch("display_func_calls", "Display Func Calls", value=True), class_="ms-2"),
+                    class_="chat-footer d-flex align-items-center"
+                )
             )
-        ),
-    ),
-    
-    # Chat statistics
-    ui.div(
-        ui.h5("Chat Statistics"),
-        ui.output_text("message_count"),
-        ui.output_text("last_message_time"),
-        class_="stats-panel"
-    ),
-    
-    class_="container-fluid p-4"
+        )
+    )
 )
 
 def server(input, output, session):
@@ -282,7 +242,7 @@ def server(input, output, session):
         """Handle model selection changes"""
         selected_model = input.model_select()
         print(f"🔄 Switching to model: {selected_model}")
-        
+
         # Create new LLM instance
         new_llm = create_llm(selected_model)
         if new_llm:
@@ -294,6 +254,8 @@ def server(input, output, session):
             print("ℹ️ Model switched; preserving existing chat messages.")
         else:
             await chat.append_message(f"⚠️ Failed to switch to {selected_model}")
+
+    
 
     # Register MCP server tools asynchronously on app startup
     @reactive.effect
@@ -492,14 +454,7 @@ def server(input, output, session):
         times.append(bot_time)
         message_times.set(times)
     
-    @reactive.effect
-    @reactive.event(input.clear_chat)
-    async def _():
-        """Clear all chat messages"""
-        await chat.clear_messages()
-        message_times.set([])
-        # Add welcome message back
-        await chat.append_message(welcome)
+    # Clear chat button and handler removed per UX update
     
     @output
     @render.text
@@ -522,16 +477,48 @@ def server(input, output, session):
     def chat_history():
         """Render chat history into the left sidebar"""
         msgs = chat.messages()
-        # Render each message as a small card-like div
+        # If there is at least one user message, show it prominently at the top
         items = []
-        for i, m in enumerate(msgs):
-            # Keep messages short in the sidebar
-            text = m if isinstance(m, str) else str(m)
-            short = (text[:80] + '...') if len(text) > 80 else text
-            items.append(ui.div(ui.p(short, class_="mb-1"), class_="border rounded p-2 mb-2"))
-        if not items:
-            return ui.div(ui.p("No chat history yet."))
-        return ui.div(*items)
+        first_user_msg = None
+        if msgs:
+            # Try to find the first message that appears to be from the user.
+            # Messages may be strings or objects; handle both.
+            for m in msgs:
+                if isinstance(m, str):
+                    # Use the first non-empty string
+                    if m.strip():
+                        first_user_msg = m
+                        break
+                else:
+                    # If it's dict-like, look for common keys
+                    try:
+                        role = getattr(m, 'role', None) if not isinstance(m, dict) else m.get('role')
+                        content = getattr(m, 'content', None) if not isinstance(m, dict) else m.get('content')
+                        if role and role == 'user' and content:
+                            first_user_msg = content
+                            break
+                        # fallback: if content exists and no role, take it
+                        if content and not role:
+                            first_user_msg = content
+                            break
+                    except Exception:
+                        # last-resort string conversion
+                        s = str(m)
+                        if s.strip():
+                            first_user_msg = s
+                            break
+
+        if first_user_msg:
+            display_text = first_user_msg if isinstance(first_user_msg, str) else str(first_user_msg)
+            short = (display_text[:200] + '...') if len(display_text) > 200 else display_text
+            # Only display the first user message, bold, with a light separator below
+            return ui.div(
+                ui.p(short, class_="sidebar-msg"),
+                ui.tags.hr(class_="sidebar-sep")
+            )
+
+        return ui.div(ui.p("No chat history yet.", class_="sidebar-msg"))
+    
 
 # Create the app
 app = App(app_ui, server)
