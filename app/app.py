@@ -50,50 +50,55 @@ Here are some suggestions:
 
 
 # Define the UI
-app_ui = ui.page_fluid(
+app_ui = ui.page_fillable(
     ui.layout_sidebar(
         ui.sidebar(
             ui.h5("Chat History"),
-            ui.div(ui.input_action_button("new_chat", "New Chat", style=(
-                "background: linear-gradient(90deg, #2b6cb0 0%, #3182ce 50%, #63b3ed 100%);"
-                "color: white; border: none; padding: 8px 12px; border-radius: 6px;"
-            )), class_="mb-3"),
+            ui.input_action_button(
+                "new_chat", 
+                "New Chat",
+                class_="btn-primary w-100 mb-3"
+            ),
             ui.output_ui("chat_history"),
             id="sidebar_left",
             open="desktop",
         ),
         ui.card(
             ui.card_header(
-                ui.h4("Sales Analytics Copilot", style="color: white; margin: 0;"),
-                style=("background: linear-gradient(90deg, #2b6cb0 0%, #3182ce 50%, #63b3ed 100%);"
-                       "padding: 12px 16px; border-radius: 6px 6px 0 0;")
+                ui.h4("Sales Analytics Copilot", class_="m-0"),
+                class_="bg-primary text-white"
             ),
             ui.card_body(
                 ui.chat_ui(
                     id="chat",
                     messages=[welcome],
-                    style="width: 100%; height: 100%;",
                 ),
-                style="flex: 1 1 auto; min-height: 0; overflow-y: auto;",
+                fillable=True,
+                class_="p-0"
             ),
             ui.card_footer(
-                ui.input_select("model_select", "Select LLM", choices=[
-                    "anthropic/claude-sonnet-4",
-                    "openai/gpt-4o",
-                    "openai/gpt-4.1",
-                    "openai/gpt-oss-120b",
-                    "qwen/qwen3-30b-a3b",
-                    "qwen/qwen3-30b-a3b-thinking-2507",
-                    "deepseek/deepseek-chat-v3.1",
-                ]),
-                ui.input_select("prompt_select", "Select Prompt", choices=all_suggested_prompts),
-                ui.input_switch("display_func_calls", "Display Func Calls", value=True),
-                ui.input_switch("disable_plots", "Disable Plots", value=False),
-                class_="bg-light d-flex justify-content-between align-items-center"
+                ui.layout_columns(
+                    ui.input_select("model_select", "Select LLM", choices=[
+                        "anthropic/claude-sonnet-4",
+                        "openai/gpt-4o",
+                        "openai/gpt-4.1",
+                        "openai/gpt-oss-120b",
+                        "qwen/qwen3-30b-a3b",
+                        "qwen/qwen3-30b-a3b-thinking-2507",
+                        "deepseek/deepseek-chat-v3.1",
+                    ]),
+                    ui.input_select("prompt_select", "Select Prompt", choices=all_suggested_prompts),
+                    ui.input_switch("display_func_calls", "Display Func Calls", value=True),
+                    ui.input_switch("disable_plots", "Disable Plots", value=False),
+                    col_widths=[3, 5, 2, 2]
+                ),
+                class_="bg-light p-2"
             ),
             full_screen=True,
-            style="flex: 1 1 auto; width: 100%; display: flex; flex-direction: column; height: 100vh;",
-        )
+            fill=True,
+            height="100%"
+        ),
+        fillable=True
     )
 )
 
