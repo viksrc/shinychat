@@ -157,14 +157,13 @@ def get_sales_data(
         else:
             return f"❌ Invalid groupby value: {groupby}. Valid: region, week, month, quarter, year"
 
-        # Return aggregated JSON and pretty table
+        # Return aggregated JSON only
         result_json = agg.to_json(orient='records')
-        return f"{description} | Grouped by: {groupby}\n\n{agg.to_string(index=False)}\n\nJSON: {result_json}"
+        return result_json
 
-    # No grouping: return raw records
+    # No grouping: return raw records JSON only
     result = df.to_json(orient="records")
-
-    return f"{description}\n\n{df.to_string(index=False)}\n\nJSON: {result}"
+    return result
 
 if __name__ == "__main__":
     # Run the MCP server on stdio
