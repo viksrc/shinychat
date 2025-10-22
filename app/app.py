@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 import time
 from sales_chart import create_sales_chart
+from streaming import chunk_generator as _chunk_generator
 
 # Read suggested prompts from file
 def load_suggested_prompts():
@@ -321,122 +322,9 @@ def server(input, output, session):
             full_text = ""
             message_id = None
             
-            # Create a generator function to handle the streaming
-            async def chunk_generator(disable_plots):
-                """Generator that processes chunks from the async stream"""
-                chart_to_show = None
-                stream = await llm.stream_async(user_input, content="all")
-                async for chunk in stream:
-                    yield chunk
-                    
-                    # Check for ContentToolResult
-                    if hasattr(chunk, '__class__') and 'ContentToolResult' in str(chunk.__class__):
-                        tool_name = getattr(chunk, 'name', None)
-                        print(f"📊 Found ContentToolResult: {tool_name}")
-                        
-                        if tool_name == 'get_sales_data':
-                            # Get the structured value
-                            tool_value = getattr(chunk, 'value', chunk)
-                            print(f"🔍 Tool result type: {type(tool_value)}")
-                            print(f"🔍 Tool result value: {tool_value[:200] if isinstance(tool_value, str) else tool_value}")
-
-                            # Robust parsing for streamed/truncated JSON: accumulate text until we can
-                            # extract a balanced JSON array/object and parse it. Avoid calling json.loads
-                            # on partial strings which raises JSONDecodeError.
-                            if not hasattr(chunk_generator, '_json_buf'):
-                                chunk_generator._json_buf = ''
-
-                            # If value is already structured (list/dict), use it directly
-                            if isinstance(tool_value, (list, dict)):
-                                sales_data = tool_value
-                                print(f"✅ Received structured sales data ({len(sales_data)} items)")
-                            elif isinstance(tool_value, str):
-                                # Append to buffer and try to extract a JSON array or object
-                                chunk_generator._json_buf += tool_value
-                                buf = chunk_generator._json_buf
-
-                                def try_parse_candidate(s):
-                                    try:
-                                        return json.loads(s)
-                                    except Exception:
-                                        return None
-
-                                parsed = None
-
-                                # First try to find a balanced JSON array starting at first '['
-                                start = buf.find('[')
-                                if start != -1:
-                                    depth = 0
-                                    for idx in range(start, len(buf)):
-                                        ch = buf[idx]
-                                        if ch == '[':
-                                            depth += 1
-                                        elif ch == ']':
-                                            depth -= 1
-                                            if depth == 0:
-                                                candidate = buf[start:idx+1]
-                                                parsed = try_parse_candidate(candidate)
-                                                if parsed is not None:
-                                                    sales_data = parsed
-                                                    # remove consumed portion from buffer
-                                                    chunk_generator._json_buf = buf[idx+1:]
-                                                break
-
-                                # If not found, try to find a balanced JSON object starting at first '{'
-                                if parsed is None:
-                                    start_obj = buf.find('{')
-                                    if start_obj != -1:
-                                        depth = 0
-                                        for idx in range(start_obj, len(buf)):
-                                            ch = buf[idx]
-                                            if ch == '{':
-                                                depth += 1
-                                            elif ch == '}':
-                                                depth -= 1
-                                                if depth == 0:
-                                                    candidate = buf[start_obj:idx+1]
-                                                    parsed = try_parse_candidate(candidate)
-                                                    if parsed is not None:
-                                                        sales_data = parsed
-                                                        chunk_generator._json_buf = buf[idx+1:]
-                                                    break
-
-                                # As a last resort, try parsing the whole buffer
-                                if parsed is None:
-                                    whole = try_parse_candidate(buf)
-                                    if whole is not None and isinstance(whole, (list, dict)):
-                                        sales_data = whole
-                                        chunk_generator._json_buf = ''
-
-                                if parsed is None and not isinstance(tool_value, (list, dict)):
-                                    # Not enough data yet; wait for more chunks
-                                    sales_data = None
-                                        # No sales data available yet
-                                    
-                        if 'sales_data' in locals() and sales_data is not None:
-                            print(f"✅ Extracted sales data: {len(sales_data)} products")
-                            if not disable_plots:
-                                try:
-                                    # Create the chart but don't yield yet - save it to show after stream completes
-                                    current_counter = chart_counter[0]
-                                    chartchunk =  create_sales_chart(output, sales_data, current_counter)
-                                    chart_counter[0] += 1
-                                    print(f"📊 _create_sales_chart returned: {chartchunk}")
-                                    if chartchunk:
-                                        chart_to_show = chartchunk
-                                except Exception as e_chart:
-                                    print(f"⚠️ Failed to render sales chart: {e_chart}")
-                            else:
-                                print("📊 Plots disabled, skipping chart creation")
-                
-                # After all chunks, yield the chart if we created one
-                if chart_to_show is not None:
-                    print(f"📊 Yielding chart after stream completed")
-                    yield chart_to_show
-                    
-                                    
-            # Pass the generator directly to append_message_stream
-            await chat.append_message_stream(chunk_generator(disable_plots))
+            # Pass the generator from streaming.chunk_generator to append_message_stream
+            # The generator will yield stream chunks and then a final chart UI element.
+            await chat.append_message_stream(_chunk_generator(llm, user_input, output, chart_counter, disable_plots))
             
             print(f"✅ Message completed")
             
