@@ -23,13 +23,8 @@ def load_suggested_prompts():
         return prompts
     except Exception as e:
         print(f"⚠️ Failed to load suggested prompts: {e}")
-        return [
-            "Show me sales by region",
-            "What's the best performing product?",
-            "Generate a sales report for Q3",
-            "Compare this month's sales to last month",
-            "Show me the sales trend for the past 6 months"
-        ]
+        return []
+        
 
 # Load all suggested prompts
 all_suggested_prompts = load_suggested_prompts()
@@ -68,13 +63,9 @@ app_ui = ui.page_fillable(
                 ui.h4("Sales Analytics Copilot", class_="m-0"),
                 class_="bg-primary text-white"
             ),
-            ui.card_body(
-                ui.chat_ui(
-                    id="chat",
-                    messages=[welcome],
-                ),
-                fillable=True,
-                class_="p-0"
+            ui.chat_ui(
+                id="chat",
+                messages=[welcome],
             ),
             ui.card_footer(
                 ui.layout_columns(
@@ -106,14 +97,16 @@ def server(input, output, session):
     # Create chat instance (async mode)
     
     def _create_sales_chart(sales_data, chart_counter_value):
-        """Create and display a sales chart from the provided data"""
-        print(f"📊 Detected sales data, creating chart...")
+        """Create and display a sales chart and table from the provided data"""
+        print(f"📊 Detected sales data, creating chart and table...")
         try:
             # Create DataFrame
             df = pd.DataFrame(sales_data)
             
-            # Create a unique ID for the chart (include timestamp to avoid collisions)
-            chart_id = f"sales_chart_{chart_counter_value}_{int(time.time() * 1000)}"
+            # Create unique IDs (include timestamp to avoid collisions)
+            timestamp = int(time.time() * 1000)
+            chart_id = f"sales_chart_{chart_counter_value}_{timestamp}"
+            table_id = f"sales_table_{chart_counter_value}_{timestamp}"
             
             # Create Plotly bar chart
             fig = go.Figure(data=[
@@ -135,23 +128,41 @@ def server(input, output, session):
                 template="plotly_white"
             )
             
-            # Ensure uniqueness (include timestamp)
-            chart_id = f"sales_chart_{chart_counter_value}_{int(time.time() * 1000)}"
-            
             # Create the render function with the figure
             @render_widget
             def make_chart():
                 return fig
 
-            # Register the output
+            # Register the chart output
             output(id=chart_id)(make_chart)
+            
+            # Create the render function for the data frame
+            @render.data_frame
+            def make_table():
+                return df
+            
+            # Register the data frame output
+            output(id=table_id)(make_table)
 
-            msg = ui.div(output_widget(chart_id), class_="my-3")
+            # Create tabbed view with chart and table
+            msg = ui.div(
+                ui.navset_tab(
+                    ui.nav_panel("Chart", output_widget(chart_id)),
+                    ui.nav_panel("Data Table", 
+                        ui.div(
+                            ui.output_data_frame(table_id),
+                            style="height: 400px; overflow-y: auto;"
+                        )
+                    ),
+                    id=f"tabs_{chart_counter_value}_{timestamp}"
+                ),
+                class_="my-3"
+            )
           
             return msg
             
         except Exception as chart_error:
-            print(f"⚠️  Failed to create chart: {chart_error}")
+            print(f"⚠️  Failed to create chart/table: {chart_error}")
             import traceback
             print(traceback.format_exc())
             return False
@@ -384,6 +395,7 @@ def server(input, output, session):
             # Create a generator function to handle the streaming
             async def chunk_generator(disable_plots):
                 """Generator that processes chunks from the async stream"""
+                chart_to_show = None
                 stream = await llm.stream_async(user_input, content="all")
                 async for chunk in stream:
                     yield chunk
@@ -476,17 +488,22 @@ def server(input, output, session):
                             print(f"✅ Extracted sales data: {len(sales_data)} products")
                             if not disable_plots:
                                 try:
-                                    # Create and display the sales chart
+                                    # Create the chart but don't yield yet - save it to show after stream completes
                                     current_counter = chart_counter[0]
                                     chartchunk = _create_sales_chart(sales_data, current_counter)
                                     chart_counter[0] += 1
                                     print(f"📊 _create_sales_chart returned: {chartchunk}")
                                     if chartchunk:
-                                        yield chartchunk
+                                        chart_to_show = chartchunk
                                 except Exception as e_chart:
                                     print(f"⚠️ Failed to render sales chart: {e_chart}")
                             else:
                                 print("📊 Plots disabled, skipping chart creation")
+                
+                # After all chunks, yield the chart if we created one
+                if chart_to_show is not None:
+                    print(f"📊 Yielding chart after stream completed")
+                    yield chart_to_show
                     
                                     
             # Pass the generator directly to append_message_stream
@@ -524,25 +541,23 @@ def server(input, output, session):
             return f"Last message: {times[-1]}"
         return "No messages yet"
 
-    @output
     @render.ui
     def chat_history():
         """Render chat history into the left sidebar"""
         # Force reactive dependencies so this output reruns when new messages arrive
-        _ = message_times.get()
-        try:
-            # chat.messages() may be reactive; call it to register a dependency
-            _ = chat.messages()
-        except Exception:
-            # If chat.messages() isn't available as a reactive, ignore and continue
-            pass
-
+        times = message_times.get()
+        sessions_list = chat_sessions.get()
+        
         # Combine persisted sessions (from chat_sessions) and the current chat's first user message
-        sessions = chat_sessions.get() or []
+        sessions = sessions_list or []
 
         # Compute first user message from current chat (if any)
         current_first = None
-        msgs = chat.messages()
+        try:
+            msgs = chat.messages()
+        except Exception:
+            msgs = []
+        
         if msgs:
             for m in msgs:
                 if isinstance(m, str):
@@ -582,8 +597,10 @@ def server(input, output, session):
                 children.append(ui.p(f"{label} ", class_="sidebar-msg"))
                 children.append(ui.tags.hr(class_="sidebar-sep"))
 
+        # Return children if we have any, otherwise show "no history" message
+        if children:
             return ui.div(*children)
-
+        
         return ui.div(ui.p("No chat history yet.", class_="sidebar-msg"))
     
 
