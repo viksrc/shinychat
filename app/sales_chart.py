@@ -68,7 +68,7 @@ def create_sales_chart(output, sales_data, chart_counter_value):
                 ui.nav_panel("Data Table", 
                     ui.div(
                         ui.output_data_frame(table_id),
-                        style="height: 400px; overflow-y: auto;"
+                        style="height: 400px;"
                     )
                 ),
                 id=f"tabs_{chart_counter_value}_{timestamp}"
