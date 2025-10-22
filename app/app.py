@@ -10,6 +10,7 @@ import os
 import sys
 from pathlib import Path
 import time
+from sales_chart import create_sales_chart
 
 # Read suggested prompts from file
 def load_suggested_prompts():
@@ -95,78 +96,6 @@ app_ui = ui.page_fillable(
 
 def server(input, output, session):
     # Create chat instance (async mode)
-    
-    def _create_sales_chart(sales_data, chart_counter_value):
-        """Create and display a sales chart and table from the provided data"""
-        print(f"📊 Detected sales data, creating chart and table...")
-        try:
-            # Create DataFrame
-            df = pd.DataFrame(sales_data)
-            
-            # Create unique IDs (include timestamp to avoid collisions)
-            timestamp = int(time.time() * 1000)
-            chart_id = f"sales_chart_{chart_counter_value}_{timestamp}"
-            table_id = f"sales_table_{chart_counter_value}_{timestamp}"
-            
-            # Create Plotly bar chart
-            fig = go.Figure(data=[
-                go.Bar(
-                    x=df['Product'],
-                    y=df['Sales'],
-                    marker_color='rgb(102, 126, 234)',
-                    text=df['Sales'],
-                    textposition='auto',
-                )
-            ])
-            
-            fig.update_layout(
-                title="📊 Sales Data Visualization",
-                xaxis_title="Products",
-                yaxis_title="Sales",
-                showlegend=False,
-                height=400,
-                template="plotly_white"
-            )
-            
-            # Create the render function with the figure
-            @render_widget
-            def make_chart():
-                return fig
-
-            # Register the chart output
-            output(id=chart_id)(make_chart)
-            
-            # Create the render function for the data frame
-            @render.data_frame
-            def make_table():
-                return df
-            
-            # Register the data frame output
-            output(id=table_id)(make_table)
-
-            # Create tabbed view with chart and table
-            msg = ui.div(
-                ui.navset_tab(
-                    ui.nav_panel("Chart", output_widget(chart_id)),
-                    ui.nav_panel("Data Table", 
-                        ui.div(
-                            ui.output_data_frame(table_id),
-                            style="height: 400px; overflow-y: auto;"
-                        )
-                    ),
-                    id=f"tabs_{chart_counter_value}_{timestamp}"
-                ),
-                class_="my-3"
-            )
-          
-            return msg
-            
-        except Exception as chart_error:
-            print(f"⚠️  Failed to create chart/table: {chart_error}")
-            import traceback
-            print(traceback.format_exc())
-            return False
-
             
     chat = ui.Chat(id="chat")
     
@@ -490,7 +419,7 @@ def server(input, output, session):
                                 try:
                                     # Create the chart but don't yield yet - save it to show after stream completes
                                     current_counter = chart_counter[0]
-                                    chartchunk = _create_sales_chart(sales_data, current_counter)
+                                    chartchunk =  create_sales_chart(output, sales_data, current_counter)
                                     chart_counter[0] += 1
                                     print(f"📊 _create_sales_chart returned: {chartchunk}")
                                     if chartchunk:
