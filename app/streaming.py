@@ -102,19 +102,21 @@ async def chunk_generator(llm, user_input, output, chart_counter, disable_plots=
                             sales_data = None
 
                         if 'sales_data' in locals() and sales_data is not None:
-                            # create chart if allowed
+                            # create chart if allowed and yield it immediately so the UI
+                            # can display each chart as soon as its tool result arrives.
                             if not disable_plots:
                                 try:
                                     current_counter = chart_counter[0]
-                                    # create_sales_chart is expected to be available to caller
-                                    chartchunk =  create_sales_chart(output, sales_data, current_counter)
+                                    chartchunk = create_sales_chart(output, sales_data, current_counter)
                                     chart_counter[0] += 1
                                     if chartchunk:
-                                        chart_to_show = chartchunk
+                                        # Yield the chart UI element right away
+                                        yield chartchunk
                                 except Exception:
                                     # Do not fail the stream on chart creation
                                     print("⚠️ Failed to render sales chart:\n" + traceback.format_exc())
                             else:
+                                # Plots disabled; nothing to yield for this tool result
                                 pass
             except Exception:
                 # Ignore chunk parsing errors but continue streaming
