@@ -110,7 +110,9 @@ def create_sales_chart(output, sales_data, chart_counter_value):
 
     # Create tabbed view with chart and table. Keep both panes the same height to
     # avoid double scrollbars and visual jump when switching tabs.
-    tab_height = "400px"
+    outer_height = "480px"
+    tab_height = "80%"
+    spacer_height = "20%"
     panel_flex_style = "height:100%; width:100%; display:flex; flex-direction:column;"
     table_wrapper_style = "flex:1; width:100%; overflow:auto;"
     # Outer container fixes the total height. Inner panels fill 100% and handle overflow.
@@ -139,5 +141,7 @@ def create_sales_chart(output, sales_data, chart_counter_value):
             ),
             style=f"height: {tab_height};"
         ),
-        class_="my-3"
+        ui.div(style=f"height: {spacer_height};"),
+        class_="my-3",
+        style=f"width:100%; height:{outer_height}; display:flex; flex-direction:column; margin-bottom:1.25rem;"
     )
