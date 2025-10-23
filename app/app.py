@@ -324,7 +324,9 @@ def server(input, output, session):
             
             # Pass the generator from streaming.chunk_generator to append_message_stream
             # The generator will yield stream chunks and then a final chart UI element.
-            await chat.append_message_stream(_chunk_generator(llm, user_input, output, chart_counter, disable_plots))
+            await chat.append_message_stream(
+                _chunk_generator(llm, user_input, output, chart_counter, disable_plots, session)
+            )
             
             print(f"✅ Message completed")
             

@@ -7,3 +7,4 @@ mcp[cli]
 fastmcp
 anywidget
 google-genai
+faicons
