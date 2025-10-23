@@ -1,0 +1,6 @@
+🔁 Found .env file, loading environment variables from .env
+🔐 OPENROUTER_API_KEY present (length=73) — preview: sk-o...cc23
+🔎 OPENROUTER_API_KEY SHA256: cda1d06ce48a7180f01e1ec7e8e3a6634c504526b407e6c5f80774f0ece183aa
+🚀 Starting Shiny Chat with MCP...
+INFO:     Will watch for changes in these directories: ['/Users/vivek/projects/shiny/app']
+ERROR:    [Errno 48] Address already in use

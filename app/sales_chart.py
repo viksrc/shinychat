@@ -1,8 +1,15 @@
 import pandas as pd
 import plotly.graph_objects as go
 import time
+from datetime import datetime
 from shiny import ui, render
 from shinywidgets import output_widget, render_widget
+
+
+def _log(message: str) -> None:
+    """Print log messages with a timestamp prefix."""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"{timestamp} {message}")
 
 def create_sales_chart(output, sales_data, chart_counter_value):
     """
@@ -15,7 +22,7 @@ def create_sales_chart(output, sales_data, chart_counter_value):
     Returns:
         UI element containing the chart and table in a tabbed view
     """
-    print(f"📊 Detected sales data, creating chart and table...")
+    _log("📊 Detected sales data, creating chart and table...")
     # Create DataFrame
     df = pd.DataFrame(sales_data)
     
@@ -87,15 +94,25 @@ def create_sales_chart(output, sales_data, chart_counter_value):
     
     # Create the render function for the data frame
     @render.data_frame
-    def make_table():
-        return df
+    def make_grid():
+        return render.DataGrid(
+            df,
+            height="400px",
+            filters=False,
+            editable=False,
+            selection_mode="row",
+        )
     
     # Register the data frame output
-    output(id=table_id)(make_table)
+    output(id=table_id)(make_grid)
+
+    _log(f"✅ Created chart '{chart_id}' and table '{table_id}'")
 
     # Create tabbed view with chart and table. Keep both panes the same height to
     # avoid double scrollbars and visual jump when switching tabs.
     tab_height = "400px"
+    panel_flex_style = "height:100%; width:100%; display:flex; flex-direction:column;"
+    table_wrapper_style = "flex:1; width:100%; overflow:auto;"
     # Outer container fixes the total height. Inner panels fill 100% and handle overflow.
     return ui.div(
         ui.div(
@@ -104,14 +121,17 @@ def create_sales_chart(output, sales_data, chart_counter_value):
                     "Chart",
                     ui.div(
                         output_widget(chart_id),
-                        style="height:100%; width:100%; display:flex; align-items:stretch; justify-content:center; overflow:hidden;",
+                        style=f"{panel_flex_style} align-items:stretch; justify-content:center; overflow:hidden;",
                     ),
                 ),
                 ui.nav_panel(
                     "Data Table",
                     ui.div(
-                        ui.output_data_frame(table_id),
-                        style="height:100%; width:100%; overflow:auto;",
+                        ui.div(
+                            ui.output_data_frame(table_id),
+                            style=table_wrapper_style,
+                        ),
+                        style=panel_flex_style,
                     ),
                 ),
                 id=f"tabs_{chart_counter_value}_{timestamp}",
