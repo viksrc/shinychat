@@ -47,7 +47,32 @@ Here are some suggestions:
 
 
 # Define the UI
+theme = ui.Theme()
+
 app_ui = ui.page_fillable(
+    ui.tags.style(
+        """
+        [data-bs-theme='dark'] .card-footer {
+            background-color: #1f2937 !important;
+            border-top: 1px solid #374151 !important;
+        }
+        [data-bs-theme='dark'] .card-footer label {
+            color: #e5e7eb !important;
+        }
+        [data-bs-theme='dark'] .card-footer select,
+        [data-bs-theme='dark'] .card-footer input,
+        [data-bs-theme='dark'] .card-footer button {
+            background-color: #111827 !important;
+            color: #e5e7eb !important;
+            border-color: #374151 !important;
+        }
+        [data-bs-theme='dark'] .card-footer button:hover,
+        [data-bs-theme='dark'] .card-footer button:focus {
+            background-color: #1f2937 !important;
+            color: #f9fafb !important;
+        }
+        """
+    ),
     ui.layout_sidebar(
         ui.sidebar(
             ui.h5("Chat History"),
@@ -62,7 +87,11 @@ app_ui = ui.page_fillable(
         ),
         ui.card(
             ui.card_header(
-                ui.h4("Sales Analytics Copilot", class_="m-0"),
+                ui.div(
+                    ui.h4("Sales Analytics Copilot", class_="m-0"),
+                    ui.input_dark_mode(id="color_mode_toggle", class_="ms-2"),
+                    class_="d-flex align-items-center justify-content-between w-100"
+                ),
                 class_="bg-primary text-white"
             ),
             ui.chat_ui(
@@ -92,7 +121,8 @@ app_ui = ui.page_fillable(
             height="100%"
         ),
         fillable=True
-    )
+    ),
+    theme=theme,
 )
 
 def server(input, output, session):
